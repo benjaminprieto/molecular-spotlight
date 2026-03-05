@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useEffect, useCallback } from "react";
 
 // --- Types ---
 interface Node {
@@ -93,10 +93,11 @@ function createNetwork(): { nodes: Node[]; edges: Edge[] } {
 
 // Animation phases
 const PHASE_CELL = 0;       // dense dot
-const PHASE_ZOOM = 1;       // expanding into network (grey)
-const PHASE_HIGHLIGHT = 2;  // colored pathways emerge
+const PHASE_ZOOM = 1;       // expanding into network (nodes only)
+const PHASE_EDGES = 2;      // grey edges progressively connect
+const PHASE_HIGHLIGHT = 3;  // colored pathways emerge
 
-const PHASE_DURATIONS = [2000, 2500, 2000]; // ms per phase
+const PHASE_DURATIONS = [2000, 2500, 2500, 2000]; // ms per phase
 const PAUSE_AFTER = 4000; // hold final state
 
 export default function CellAnimation() {
@@ -104,7 +105,7 @@ export default function CellAnimation() {
   const networkRef = useRef<ReturnType<typeof createNetwork> | null>(null);
   const animRef = useRef<number>(0);
   const startTimeRef = useRef<number>(0);
-  const [phase, setPhase] = useState(PHASE_CELL);
+  
 
   const draw = useCallback((timestamp: number) => {
     const canvas = canvasRef.current;
@@ -132,7 +133,7 @@ export default function CellAnimation() {
       }
     }
 
-    setPhase(currentPhase);
+    
 
     const totalDuration = PHASE_DURATIONS.reduce((a, b) => a + b, 0);
     const shouldLoop = elapsed > totalDuration + PAUSE_AFTER;
@@ -168,6 +169,9 @@ export default function CellAnimation() {
       scale = 1;
     }
 
+    // Edge connection progress (0 in cell/zoom, 0→1 in PHASE_EDGES, 1 after)
+    const edgeProgress = currentPhase === PHASE_EDGES ? ep : (currentPhase > PHASE_EDGES ? 1 : 0);
+
     // Highlight progress
     const highlightAlpha = currentPhase === PHASE_HIGHLIGHT ? ep : 0;
 
@@ -184,10 +188,12 @@ export default function CellAnimation() {
       };
     };
 
-    // Draw edges
-    if (scale > 0.1) {
+    // Draw edges - only show progressively during PHASE_EDGES
+    if (scale > 0.1 && edgeProgress > 0) {
       const edgeOpacity = Math.min((scale - 0.1) / 0.5, 1) * 0.6;
-      edges.forEach(({ a, b }) => {
+      const visibleEdgeCount = Math.floor(edges.length * edgeProgress);
+      for (let i = 0; i < visibleEdgeCount; i++) {
+        const { a, b } = edges[i];
         const na = nodes[a];
         const nb = nodes[b];
         const pa = project(na);
@@ -201,7 +207,7 @@ export default function CellAnimation() {
           ctx.lineWidth = 1.2;
         } else {
           const fade = highlightAlpha > 0 ? 1 - highlightAlpha * 0.6 : 1;
-          ctx.strokeStyle = `rgba(255,255,255,${0.06 * edgeOpacity * fade})`;
+          ctx.strokeStyle = `rgba(255,255,255,${0.08 * edgeOpacity * fade})`;
           ctx.lineWidth = 0.5;
         }
 
@@ -209,7 +215,7 @@ export default function CellAnimation() {
         ctx.moveTo(pa.px, pa.py);
         ctx.lineTo(pb.px, pb.py);
         ctx.stroke();
-      });
+      }
     }
 
     // Draw nodes
@@ -288,12 +294,6 @@ export default function CellAnimation() {
     };
   }, [draw]);
 
-  const phaseLabels = [
-    "Célula individual",
-    "Red de interacción proteica",
-    "Vías moleculares alteradas",
-  ];
-
   return (
     <div className="relative w-full h-screen bg-background overflow-hidden">
       <canvas
@@ -301,45 +301,6 @@ export default function CellAnimation() {
         className="absolute inset-0 w-full h-full"
         style={{ width: "100%", height: "100%" }}
       />
-
-      {/* Logo / Title */}
-      <div className="absolute top-8 left-8 z-10 flex items-center gap-4">
-        <div className="font-display">
-          <span className="text-3xl font-bold tracking-tight text-foreground">Onco</span>
-          <span className="text-3xl font-bold tracking-tight text-primary">METS</span>
-        </div>
-      </div>
-
-      {/* Headline */}
-      <div className="absolute top-8 left-48 z-10 max-w-2xl">
-        <p className="text-lg md:text-xl text-foreground">
-          <span className="text-primary font-semibold">Biological LLM</span>
-          <span className="text-muted-foreground">
-            {" "}– Unraveling cancer complexity from a complete, unified picture of the patient
-          </span>
-        </p>
-      </div>
-
-      {/* Phase indicator */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex gap-3">
-        {phaseLabels.map((label, i) => (
-          <div
-            key={i}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-display transition-all duration-500 ${
-              phase >= i
-                ? "bg-secondary text-foreground"
-                : "bg-muted/30 text-muted-foreground"
-            }`}
-          >
-            <div
-              className={`w-2 h-2 rounded-full transition-all duration-500 ${
-                phase >= i ? "bg-primary" : "bg-muted-foreground"
-              }`}
-            />
-            {label}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
