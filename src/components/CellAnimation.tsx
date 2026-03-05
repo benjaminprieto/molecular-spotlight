@@ -218,7 +218,8 @@ export default function CellAnimation() {
           ctx.strokeStyle = hslToRgba(color, 0.8 * colorProgress * individualAlpha);
           ctx.lineWidth = 2;
         } else {
-          ctx.strokeStyle = `rgba(255,255,255,${0.35 * individualAlpha})`;
+          const dimEdge = 1 - colorProgress * 0.6;
+          ctx.strokeStyle = `rgba(255,255,255,${0.35 * individualAlpha * dimEdge})`;
           ctx.lineWidth = 1;
         }
 
@@ -238,28 +239,28 @@ export default function CellAnimation() {
       if (colorProgress > 0 && n.cluster >= 0) {
         const color = SECTION_COLORS[n.cluster];
         const boostedAlpha = Math.min((0.6 + (1 + depth) * 0.25) * colorProgress, 1);
-        const nodeSize = size * (1 + 0.5 * colorProgress);
         
         // Outer glow
-        const glowSize = nodeSize * 3;
-        ctx.fillStyle = hslToRgba(color, 0.15 * colorProgress);
+        ctx.fillStyle = hslToRgba(color, 0.12 * colorProgress);
         ctx.beginPath();
-        ctx.arc(px, py, glowSize, 0, Math.PI * 2);
+        ctx.arc(px, py, size * 2.5, 0, Math.PI * 2);
         ctx.fill();
         
-        // Bright colored node
+        // Bright colored node (same size)
         ctx.fillStyle = hslToRgba(color, boostedAlpha);
         ctx.beginPath();
-        ctx.arc(px, py, nodeSize, 0, Math.PI * 2);
+        ctx.arc(px, py, size, 0, Math.PI * 2);
         ctx.fill();
         
         // White hot center
-        ctx.fillStyle = `rgba(255,255,255,${0.4 * colorProgress})`;
+        ctx.fillStyle = `rgba(255,255,255,${0.35 * colorProgress})`;
         ctx.beginPath();
-        ctx.arc(px, py, nodeSize * 0.4, 0, Math.PI * 2);
+        ctx.arc(px, py, size * 0.4, 0, Math.PI * 2);
         ctx.fill();
       } else {
-        ctx.fillStyle = `rgba(255,255,255,${Math.max(alpha, 0.05)})`;
+        // Dim non-colored nodes during color phase
+        const dimFactor = 1 - colorProgress * 0.7;
+        ctx.fillStyle = `rgba(255,255,255,${Math.max(alpha * dimFactor, 0.03)})`;
         ctx.beginPath();
         ctx.arc(px, py, size, 0, Math.PI * 2);
         ctx.fill();
