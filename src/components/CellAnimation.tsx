@@ -8,7 +8,7 @@ interface Node {
   vx: number;
   vy: number;
   baseSize: number;
-  cluster: number; // -1 = grey, 0-5 = colored pathway
+  cluster: number; // -1 = no cluster, 0-3 = colored section
 }
 
 interface Edge {
@@ -16,39 +16,55 @@ interface Edge {
   b: number;
 }
 
-// Cluster colors (HSL strings for canvas)
-const CLUSTER_COLORS = [
+// 4 section colors (HSL strings for canvas)
+const SECTION_COLORS = [
   "hsl(330, 80%, 55%)", // pink
   "hsl(160, 70%, 50%)", // teal/green
   "hsl(210, 80%, 55%)", // blue
   "hsl(30, 90%, 55%)",  // orange
-  "hsl(270, 60%, 55%)", // purple
-  "hsl(50, 85%, 55%)",  // yellow
 ];
 
-const GREY = "rgba(255,255,255,0.15)";
-const GREY_NODE = "rgba(255,255,255,0.35)";
 const TOTAL_NODES = 600;
 const TOTAL_EDGES = 900;
-const COLORED_RATIO = 0.25;
+
+// Each section is a spatial cone — define 4 center directions
+const SECTION_CENTERS = [
+  { x: 0.7, y: 0.5, z: 0.3 },   // upper-right-front
+  { x: -0.6, y: -0.4, z: 0.5 },  // lower-left-front
+  { x: -0.3, y: 0.7, z: -0.5 },  // upper-left-back
+  { x: 0.5, y: -0.6, z: -0.4 },  // lower-right-back
+];
+const SECTION_RADIUS = 0.55; // how far from center direction a node can be to belong
 
 function createNetwork(): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
-  const numColored = Math.floor(TOTAL_NODES * COLORED_RATIO);
 
   // Create nodes in a sphere
   for (let i = 0; i < TOTAL_NODES; i++) {
-    // Fibonacci sphere for even distribution
     const phi = Math.acos(1 - 2 * (i + 0.5) / TOTAL_NODES);
     const theta = Math.PI * (1 + Math.sqrt(5)) * i;
     const r = 0.85 + Math.random() * 0.15;
 
-    const cluster = i < numColored ? Math.floor(Math.random() * CLUSTER_COLORS.length) : -1;
+    const x = r * Math.sin(phi) * Math.cos(theta);
+    const y = r * Math.sin(phi) * Math.sin(theta);
+    const z = r * Math.cos(phi);
+
+    // Assign to a spatial section if close enough to a section center
+    let cluster = -1;
+    let bestDist = SECTION_RADIUS;
+    for (let s = 0; s < SECTION_CENTERS.length; s++) {
+      const c = SECTION_CENTERS[s];
+      const dist = Math.sqrt(
+        (x - c.x) ** 2 + (y - c.y) ** 2 + (z - c.z) ** 2
+      );
+      if (dist < bestDist) {
+        bestDist = dist;
+        cluster = s;
+      }
+    }
 
     nodes.push({
-      x: r * Math.sin(phi) * Math.cos(theta),
-      y: r * Math.sin(phi) * Math.sin(theta),
-      z: r * Math.cos(phi),
+      x, y, z,
       vx: (Math.random() - 0.5) * 0.001,
       vy: (Math.random() - 0.5) * 0.001,
       baseSize: 1.2 + Math.random() * 1.8,
@@ -56,26 +72,15 @@ function createNetwork(): { nodes: Node[]; edges: Edge[] } {
     });
   }
 
-  // Group colored nodes by cluster for spatial coherence
-  const coloredIndices = nodes.map((n, i) => (n.cluster >= 0 ? i : -1)).filter((i) => i >= 0);
-  // Assign clusters based on angular position for spatial grouping
-  coloredIndices.forEach((idx) => {
-    const n = nodes[idx];
-    const angle = Math.atan2(n.y, n.x);
-    const normalizedAngle = (angle + Math.PI) / (2 * Math.PI);
-    n.cluster = Math.floor(normalizedAngle * CLUSTER_COLORS.length) % CLUSTER_COLORS.length;
-  });
-
-  // Create edges - mix of nearby and distant connections
+  // Create edges
   const edges: Edge[] = [];
   const NEARBY_EDGES = Math.floor(TOTAL_EDGES * 0.50);
   const DISTANT_EDGES = Math.floor(TOTAL_EDGES * 0.35);
 
-  // Nearby edges
   for (let i = 0; i < NEARBY_EDGES; i++) {
     const a = Math.floor(Math.random() * TOTAL_NODES);
     let bestB = (a + 1) % TOTAL_NODES;
-    let bestDist = Infinity;
+    let bestDistVal = Infinity;
     for (let attempt = 0; attempt < 10; attempt++) {
       const candidate = Math.floor(Math.random() * TOTAL_NODES);
       if (candidate === a) continue;
@@ -83,15 +88,14 @@ function createNetwork(): { nodes: Node[]; edges: Edge[] } {
       const dy = nodes[a].y - nodes[candidate].y;
       const dz = nodes[a].z - nodes[candidate].z;
       const dist = dx * dx + dy * dy + dz * dz;
-      if (dist < bestDist) {
-        bestDist = dist;
+      if (dist < bestDistVal) {
+        bestDistVal = dist;
         bestB = candidate;
       }
     }
     edges.push({ a, b: bestB });
   }
 
-  // Distant/random edges for long-range connections
   for (let i = 0; i < DISTANT_EDGES; i++) {
     const a = Math.floor(Math.random() * TOTAL_NODES);
     let b = Math.floor(Math.random() * TOTAL_NODES);
@@ -103,19 +107,24 @@ function createNetwork(): { nodes: Node[]; edges: Edge[] } {
 }
 
 // Animation phases
-const PHASE_CELL = 0;       // dense dot
-const PHASE_ZOOM = 1;       // expanding into network (nodes only)
-const PHASE_EDGES = 2;      // grey edges progressively connect
+const PHASE_CELL = 0;
+const PHASE_ZOOM = 1;
+const PHASE_EDGES = 2;
+const PHASE_COLOR = 3;
 
-const PHASE_DURATIONS = [2000, 2000, 3000]; // ms per phase
-const PAUSE_AFTER = 4000; // hold final state
+const PHASE_DURATIONS = [2000, 2000, 3000, 2500];
+const PAUSE_AFTER = 4000;
+
+// Helper: parse hsl string to rgba with alpha
+function hslToRgba(hsl: string, alpha: number): string {
+  return hsl.replace("hsl(", "hsla(").replace(")", `, ${alpha})`);
+}
 
 export default function CellAnimation() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const networkRef = useRef<ReturnType<typeof createNetwork> | null>(null);
   const animRef = useRef<number>(0);
   const startTimeRef = useRef<number>(0);
-  
 
   const draw = useCallback((timestamp: number) => {
     const canvas = canvasRef.current;
@@ -143,11 +152,8 @@ export default function CellAnimation() {
       }
     }
 
-    
-
     const totalDuration = PHASE_DURATIONS.reduce((a, b) => a + b, 0);
-    const shouldLoop = elapsed > totalDuration + PAUSE_AFTER;
-    if (shouldLoop) {
+    if (elapsed > totalDuration + PAUSE_AFTER) {
       startTimeRef.current = timestamp;
     }
 
@@ -160,29 +166,27 @@ export default function CellAnimation() {
 
     ctx.clearRect(0, 0, w, h);
 
-    // Slow rotation
     const rotAngle = elapsed * 0.0001;
     const cosR = Math.cos(rotAngle);
     const sinR = Math.sin(rotAngle);
 
-    // Easing
     const ease = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     const ep = ease(Math.min(phaseProgress, 1));
 
-    // Scale: in PHASE_CELL, everything compressed to a dot; in PHASE_ZOOM, expands
     let scale: number;
     if (currentPhase === PHASE_CELL) {
-      scale = 0.02 + ep * 0.03; // tiny dot, slightly growing
+      scale = 0.02 + ep * 0.03;
     } else if (currentPhase === PHASE_ZOOM) {
-      scale = 0.05 + ep * 0.95; // expand to full
+      scale = 0.05 + ep * 0.95;
     } else {
       scale = 1;
     }
 
-    // Edge connection progress (0 in cell/zoom, 0→1 in PHASE_EDGES, 1 after)
     const edgeProgress = currentPhase === PHASE_EDGES ? ep : (currentPhase > PHASE_EDGES ? 1 : 0);
+    
+    // Color transition progress: 0 before PHASE_COLOR, 0→1 during, 1 after
+    const colorProgress = currentPhase === PHASE_COLOR ? ep : (currentPhase > PHASE_COLOR ? 1 : 0);
 
-    // Project 3D → 2D
     const project = (n: Node) => {
       const rx = n.x * cosR - n.z * sinR;
       const rz = n.x * sinR + n.z * cosR;
@@ -205,8 +209,18 @@ export default function CellAnimation() {
 
         const edgeAge = (edgeProgress * edges.length - i) / edges.length;
         const individualAlpha = Math.min(edgeAge * 10, 1);
-        ctx.strokeStyle = `rgba(255,255,255,${0.35 * individualAlpha})`;
-        ctx.lineWidth = 1;
+
+        // Color edge if both nodes belong to the same cluster during color phase
+        const na = nodes[a];
+        const nb = nodes[b];
+        if (colorProgress > 0 && na.cluster >= 0 && na.cluster === nb.cluster) {
+          const color = SECTION_COLORS[na.cluster];
+          ctx.strokeStyle = hslToRgba(color, 0.5 * colorProgress * individualAlpha);
+          ctx.lineWidth = 1.5;
+        } else {
+          ctx.strokeStyle = `rgba(255,255,255,${0.35 * individualAlpha})`;
+          ctx.lineWidth = 1;
+        }
 
         ctx.beginPath();
         ctx.moveTo(pa.px, pa.py);
@@ -215,18 +229,38 @@ export default function CellAnimation() {
       }
     }
 
-    // Draw nodes (all grey)
+    // Draw nodes
     nodes.forEach((n) => {
       const { px, py, depth, perspective } = project(n);
       const size = n.baseSize * (0.5 + perspective * 0.5) * Math.max(scale, 0.3);
       const alpha = 0.3 + (1 + depth) * 0.2;
-      ctx.fillStyle = `rgba(255,255,255,${Math.max(alpha, 0.05)})`;
-      ctx.beginPath();
-      ctx.arc(px, py, size, 0, Math.PI * 2);
-      ctx.fill();
+
+      if (colorProgress > 0 && n.cluster >= 0) {
+        // Transition from white to cluster color
+        const color = SECTION_COLORS[n.cluster];
+        const colorAlpha = Math.max(alpha, 0.05);
+        // Draw colored node with glow
+        ctx.fillStyle = hslToRgba(color, colorAlpha * colorProgress);
+        ctx.beginPath();
+        ctx.arc(px, py, size * (1 + 0.3 * colorProgress), 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Keep a dim white underneath for smooth transition
+        if (colorProgress < 1) {
+          ctx.fillStyle = `rgba(255,255,255,${Math.max(alpha, 0.05) * (1 - colorProgress)})`;
+          ctx.beginPath();
+          ctx.arc(px, py, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.fillStyle = `rgba(255,255,255,${Math.max(alpha, 0.05)})`;
+        ctx.beginPath();
+        ctx.arc(px, py, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
     });
 
-    // In cell phase, add a soft glow around the center
+    // Glow in cell phase
     if (currentPhase === PHASE_CELL) {
       const glowRadius = radius * scale * 2.5;
       const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowRadius);
@@ -253,7 +287,6 @@ export default function CellAnimation() {
       canvas.height = canvas.offsetHeight * dpr;
       const ctx = canvas.getContext("2d");
       if (ctx) ctx.scale(dpr, dpr);
-      // Reset canvas dimensions for drawing
       canvas.width = canvas.offsetWidth * dpr;
       canvas.height = canvas.offsetHeight * dpr;
     };
