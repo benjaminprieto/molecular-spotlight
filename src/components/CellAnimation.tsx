@@ -215,8 +215,8 @@ export default function CellAnimation() {
         const nb = nodes[b];
         if (colorProgress > 0 && na.cluster >= 0 && na.cluster === nb.cluster) {
           const color = SECTION_COLORS[na.cluster];
-          ctx.strokeStyle = hslToRgba(color, 0.5 * colorProgress * individualAlpha);
-          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = hslToRgba(color, 0.8 * colorProgress * individualAlpha);
+          ctx.lineWidth = 2;
         } else {
           ctx.strokeStyle = `rgba(255,255,255,${0.35 * individualAlpha})`;
           ctx.lineWidth = 1;
@@ -236,22 +236,28 @@ export default function CellAnimation() {
       const alpha = 0.3 + (1 + depth) * 0.2;
 
       if (colorProgress > 0 && n.cluster >= 0) {
-        // Transition from white to cluster color
         const color = SECTION_COLORS[n.cluster];
-        const colorAlpha = Math.max(alpha, 0.05);
-        // Draw colored node with glow
-        ctx.fillStyle = hslToRgba(color, colorAlpha * colorProgress);
+        const boostedAlpha = Math.min((0.6 + (1 + depth) * 0.25) * colorProgress, 1);
+        const nodeSize = size * (1 + 0.5 * colorProgress);
+        
+        // Outer glow
+        const glowSize = nodeSize * 3;
+        ctx.fillStyle = hslToRgba(color, 0.15 * colorProgress);
         ctx.beginPath();
-        ctx.arc(px, py, size * (1 + 0.3 * colorProgress), 0, Math.PI * 2);
+        ctx.arc(px, py, glowSize, 0, Math.PI * 2);
         ctx.fill();
         
-        // Keep a dim white underneath for smooth transition
-        if (colorProgress < 1) {
-          ctx.fillStyle = `rgba(255,255,255,${Math.max(alpha, 0.05) * (1 - colorProgress)})`;
-          ctx.beginPath();
-          ctx.arc(px, py, size, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        // Bright colored node
+        ctx.fillStyle = hslToRgba(color, boostedAlpha);
+        ctx.beginPath();
+        ctx.arc(px, py, nodeSize, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // White hot center
+        ctx.fillStyle = `rgba(255,255,255,${0.4 * colorProgress})`;
+        ctx.beginPath();
+        ctx.arc(px, py, nodeSize * 0.4, 0, Math.PI * 2);
+        ctx.fill();
       } else {
         ctx.fillStyle = `rgba(255,255,255,${Math.max(alpha, 0.05)})`;
         ctx.beginPath();
