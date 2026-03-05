@@ -97,7 +97,7 @@ const PHASE_ZOOM = 1;       // expanding into network (nodes only)
 const PHASE_EDGES = 2;      // grey edges progressively connect
 const PHASE_HIGHLIGHT = 3;  // colored pathways emerge
 
-const PHASE_DURATIONS = [2000, 2500, 2500, 2000]; // ms per phase
+const PHASE_DURATIONS = [2000, 2000, 3000, 2500]; // ms per phase
 const PAUSE_AFTER = 4000; // hold final state
 
 export default function CellAnimation() {
@@ -188,9 +188,8 @@ export default function CellAnimation() {
       };
     };
 
-    // Draw edges - only show progressively during PHASE_EDGES
-    if (scale > 0.1 && edgeProgress > 0) {
-      const edgeOpacity = Math.min((scale - 0.1) / 0.5, 1) * 0.6;
+    // Draw edges
+    if (edgeProgress > 0) {
       const visibleEdgeCount = Math.floor(edges.length * edgeProgress);
       for (let i = 0; i < visibleEdgeCount; i++) {
         const { a, b } = edges[i];
@@ -203,11 +202,14 @@ export default function CellAnimation() {
 
         if (isColored) {
           const color = CLUSTER_COLORS[na.cluster];
-          ctx.strokeStyle = color.replace(")", `, ${highlightAlpha * edgeOpacity})`).replace("hsl(", "hsla(");
+          ctx.strokeStyle = color.replace(")", `, ${highlightAlpha * 0.7})`).replace("hsl(", "hsla(");
           ctx.lineWidth = 1.2;
         } else {
           const fade = highlightAlpha > 0 ? 1 - highlightAlpha * 0.6 : 1;
-          ctx.strokeStyle = `rgba(255,255,255,${0.08 * edgeOpacity * fade})`;
+          // Edges fade in individually as they appear
+          const edgeAge = (edgeProgress * edges.length - i) / edges.length;
+          const individualAlpha = Math.min(edgeAge * 10, 1);
+          ctx.strokeStyle = `rgba(255,255,255,${0.1 * fade * individualAlpha})`;
           ctx.lineWidth = 0.5;
         }
 
