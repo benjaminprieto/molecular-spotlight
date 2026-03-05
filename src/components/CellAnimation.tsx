@@ -66,14 +66,17 @@ function createNetwork(): { nodes: Node[]; edges: Edge[] } {
     n.cluster = Math.floor(normalizedAngle * CLUSTER_COLORS.length) % CLUSTER_COLORS.length;
   });
 
-  // Create edges - prefer nearby nodes
+  // Create edges - mix of nearby and distant connections
   const edges: Edge[] = [];
-  for (let i = 0; i < TOTAL_EDGES; i++) {
+  const NEARBY_EDGES = Math.floor(TOTAL_EDGES * 0.6);
+  const DISTANT_EDGES = TOTAL_EDGES - NEARBY_EDGES;
+
+  // Nearby edges
+  for (let i = 0; i < NEARBY_EDGES; i++) {
     const a = Math.floor(Math.random() * TOTAL_NODES);
-    // Find a nearby node
     let bestB = (a + 1) % TOTAL_NODES;
     let bestDist = Infinity;
-    for (let attempt = 0; attempt < 15; attempt++) {
+    for (let attempt = 0; attempt < 10; attempt++) {
       const candidate = Math.floor(Math.random() * TOTAL_NODES);
       if (candidate === a) continue;
       const dx = nodes[a].x - nodes[candidate].x;
@@ -86,6 +89,14 @@ function createNetwork(): { nodes: Node[]; edges: Edge[] } {
       }
     }
     edges.push({ a, b: bestB });
+  }
+
+  // Distant/random edges for long-range connections
+  for (let i = 0; i < DISTANT_EDGES; i++) {
+    const a = Math.floor(Math.random() * TOTAL_NODES);
+    let b = Math.floor(Math.random() * TOTAL_NODES);
+    while (b === a) b = Math.floor(Math.random() * TOTAL_NODES);
+    edges.push({ a, b });
   }
 
   return { nodes, edges };
@@ -194,8 +205,8 @@ export default function CellAnimation() {
 
         const edgeAge = (edgeProgress * edges.length - i) / edges.length;
         const individualAlpha = Math.min(edgeAge * 10, 1);
-        ctx.strokeStyle = `rgba(255,255,255,${0.12 * individualAlpha})`;
-        ctx.lineWidth = 0.5;
+        ctx.strokeStyle = `rgba(255,255,255,${0.35 * individualAlpha})`;
+        ctx.lineWidth = 1;
 
         ctx.beginPath();
         ctx.moveTo(pa.px, pa.py);
