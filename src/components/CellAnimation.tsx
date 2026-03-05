@@ -68,8 +68,8 @@ function createNetwork(): { nodes: Node[]; edges: Edge[] } {
 
   // Create edges - mix of nearby and distant connections
   const edges: Edge[] = [];
-  const NEARBY_EDGES = Math.floor(TOTAL_EDGES * 0.6);
-  const DISTANT_EDGES = TOTAL_EDGES - NEARBY_EDGES;
+  const NEARBY_EDGES = Math.floor(TOTAL_EDGES * 0.50);
+  const DISTANT_EDGES = Math.floor(TOTAL_EDGES * 0.35);
 
   // Nearby edges
   for (let i = 0; i < NEARBY_EDGES; i++) {
