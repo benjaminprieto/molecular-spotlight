@@ -95,9 +95,8 @@ function createNetwork(): { nodes: Node[]; edges: Edge[] } {
 const PHASE_CELL = 0;       // dense dot
 const PHASE_ZOOM = 1;       // expanding into network (nodes only)
 const PHASE_EDGES = 2;      // grey edges progressively connect
-const PHASE_HIGHLIGHT = 3;  // colored pathways emerge
 
-const PHASE_DURATIONS = [2000, 2000, 3000, 2500]; // ms per phase
+const PHASE_DURATIONS = [2000, 2000, 3000]; // ms per phase
 const PAUSE_AFTER = 4000; // hold final state
 
 export default function CellAnimation() {
@@ -172,9 +171,6 @@ export default function CellAnimation() {
     // Edge connection progress (0 in cell/zoom, 0→1 in PHASE_EDGES, 1 after)
     const edgeProgress = currentPhase === PHASE_EDGES ? ep : (currentPhase > PHASE_EDGES ? 1 : 0);
 
-    // Highlight progress
-    const highlightAlpha = currentPhase === PHASE_HIGHLIGHT ? ep : 0;
-
     // Project 3D → 2D
     const project = (n: Node) => {
       const rx = n.x * cosR - n.z * sinR;
@@ -193,25 +189,13 @@ export default function CellAnimation() {
       const visibleEdgeCount = Math.floor(edges.length * edgeProgress);
       for (let i = 0; i < visibleEdgeCount; i++) {
         const { a, b } = edges[i];
-        const na = nodes[a];
-        const nb = nodes[b];
-        const pa = project(na);
-        const pb = project(nb);
+        const pa = project(nodes[a]);
+        const pb = project(nodes[b]);
 
-        const isColored = highlightAlpha > 0 && na.cluster >= 0 && nb.cluster >= 0 && na.cluster === nb.cluster;
-
-        if (isColored) {
-          const color = CLUSTER_COLORS[na.cluster];
-          ctx.strokeStyle = color.replace(")", `, ${highlightAlpha * 0.7})`).replace("hsl(", "hsla(");
-          ctx.lineWidth = 1.2;
-        } else {
-          const fade = highlightAlpha > 0 ? 1 - highlightAlpha * 0.6 : 1;
-          // Edges fade in individually as they appear
-          const edgeAge = (edgeProgress * edges.length - i) / edges.length;
-          const individualAlpha = Math.min(edgeAge * 10, 1);
-          ctx.strokeStyle = `rgba(255,255,255,${0.1 * fade * individualAlpha})`;
-          ctx.lineWidth = 0.5;
-        }
+        const edgeAge = (edgeProgress * edges.length - i) / edges.length;
+        const individualAlpha = Math.min(edgeAge * 10, 1);
+        ctx.strokeStyle = `rgba(255,255,255,${0.12 * individualAlpha})`;
+        ctx.lineWidth = 0.5;
 
         ctx.beginPath();
         ctx.moveTo(pa.px, pa.py);
@@ -220,38 +204,15 @@ export default function CellAnimation() {
       }
     }
 
-    // Draw nodes
+    // Draw nodes (all grey)
     nodes.forEach((n) => {
       const { px, py, depth, perspective } = project(n);
       const size = n.baseSize * (0.5 + perspective * 0.5) * Math.max(scale, 0.3);
-
-      const isColored = n.cluster >= 0 && highlightAlpha > 0;
-
-      if (isColored) {
-        const color = CLUSTER_COLORS[n.cluster];
-        // Glow
-        const glowSize = size * (2 + highlightAlpha * 3);
-        const gradient = ctx.createRadialGradient(px, py, 0, px, py, glowSize);
-        gradient.addColorStop(0, color.replace(")", `, ${highlightAlpha * 0.8})`).replace("hsl(", "hsla("));
-        gradient.addColorStop(1, color.replace(")", ", 0)").replace("hsl(", "hsla("));
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(px, py, glowSize, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Core
-        ctx.fillStyle = color.replace(")", `, ${highlightAlpha})`).replace("hsl(", "hsla(");
-        ctx.beginPath();
-        ctx.arc(px, py, size * 1.3, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        const fade = highlightAlpha > 0 ? 1 - highlightAlpha * 0.5 : 1;
-        const alpha = (0.3 + (1 + depth) * 0.2) * fade;
-        ctx.fillStyle = `rgba(255,255,255,${Math.max(alpha, 0.05)})`;
-        ctx.beginPath();
-        ctx.arc(px, py, size, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      const alpha = 0.3 + (1 + depth) * 0.2;
+      ctx.fillStyle = `rgba(255,255,255,${Math.max(alpha, 0.05)})`;
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
     });
 
     // In cell phase, add a soft glow around the center
